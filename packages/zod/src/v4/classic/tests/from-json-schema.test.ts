@@ -307,6 +307,28 @@ test("const schema", () => {
   expect(() => schema.parse("world")).toThrow();
 });
 
+test("const and enum compare object and array values structurally", () => {
+  const obj = fromJSONSchema({ const: { a: 1, b: [2] } as any });
+  expect(obj.safeParse({ b: [2], a: 1 }).success).toBe(true);
+  expect(obj.safeParse({ a: 1, b: [3] }).success).toBe(false);
+  expect(obj.safeParse({ a: 1 }).success).toBe(false);
+
+  const arr = fromJSONSchema({ const: [1, 2] as any });
+  expect(arr.safeParse([1, 2]).success).toBe(true);
+  expect(arr.safeParse([2, 1]).success).toBe(false);
+  expect(arr.safeParse(1).success).toBe(false);
+
+  const mixed = fromJSONSchema({ enum: [{ a: 1 } as any, "x", null] });
+  expect(mixed.safeParse({ a: 1 }).success).toBe(true);
+  expect(mixed.safeParse("x").success).toBe(true);
+  expect(mixed.safeParse(null).success).toBe(true);
+  expect(mixed.safeParse({ a: "1" }).success).toBe(false);
+
+  expect(fromJSONSchema({ enum: [[1] as any] }).safeParse([1]).success).toBe(true);
+  expect(z.toJSONSchema(mixed)).toMatchObject({ enum: [{ a: 1 }, "x", null] });
+  expect(z.toJSONSchema(obj)).toMatchObject({ const: { a: 1, b: [2] } });
+});
+
 test("anyOf schema", () => {
   const schema = fromJSONSchema({
     anyOf: [{ type: "string" }, { type: "number" }],

@@ -253,6 +253,17 @@ function canonicalKey(value: unknown, seen: Set<object>): string | null {
   }
 }
 
+function isStructural(value: unknown): boolean {
+  return value !== null && typeof value === "object";
+}
+
+// `z.literal` compares with `===`, so object and array values are matched by canonical key
+function structuralEnum(values: readonly unknown[]): ZodType {
+  const keys = new Set(values.map((v) => canonicalKey(v, new Set())));
+  keys.delete(null);
+  return z.any().refine((input) => keys.has(canonicalKey(input, new Set())));
+}
+
 // keywords whose value is a schema or an array of them
 const SCHEMA_KEYWORDS = /*@__PURE__*/ new Set([
   "items",
@@ -451,6 +462,9 @@ function convertBaseSchema(schema: JSONSchema.JSONSchema, ctx: ConversionContext
     if (enumValues.length === 0) {
       return z.never();
     }
+    if (enumValues.some(isStructural)) {
+      return structuralEnum(enumValues);
+    }
     if (enumValues.length === 1) {
       return z.literal(enumValues[0]!);
     }
@@ -472,6 +486,7 @@ function convertBaseSchema(schema: JSONSchema.JSONSchema, ctx: ConversionContext
 
   // Handle const
   if (schema.const !== undefined) {
+    if (isStructural(schema.const)) return structuralEnum([schema.const]);
     return z.literal(schema.const);
   }
 
@@ -893,6 +908,10 @@ function convertSchema(schema: JSONSchema.JSONSchema | boolean, ctx: ConversionC
       if (schema[key] !== undefined) extraMeta[key] = schema[key];
     }
   }
+
+  // a structural `const`/`enum` is enforced by a refinement, so the keyword is carried the same way
+  if (schema.enum?.some(isStructural)) extraMeta.enum = schema.enum;
+  if (isStructural(schema.const)) extraMeta.const = schema.const;
 
   for (const key of Object.keys(schema)) {
     if (!RECOGNIZED_KEYS.has(key)) {
